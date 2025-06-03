@@ -33,8 +33,6 @@ load_dotenv()  # Load environment variables from .env file
 
 api_key = os.getenv("OPENAI_API_KEY")
 
-# openai.api_key = "sk-proj-    4mtxQhknmqjo9ASiyA7Ov2Glbud2cRmLAvnZKmUPKwucP6dlQv-LWmdMDHzJB3rRM-fkx1xRsiT3BlbkFJ3dyA0lPWrnK5nvMR_y51MWfdjCR2ZfW3CfYCW8jZvxwwitJnAtB27iYSwU7i4ObVltF6JW43cA"
-
 client = openai.OpenAI(api_key=api_key)  # Replace with your actual key
 
 EXPIRY_SECONDS = 300  # 5 minutes
@@ -42,10 +40,12 @@ redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=T
 
 
 def load_faq_content():
+    print("load_faq_content----------------")
     with open(r"/home/abdul/Desktop/bot-integration/data.txt", "r", encoding="utf-8") as file:
         return file.read()
 replied_users = set()
 def split_document(doc, chunk_size=500):
+    print("split_document-------------")
     sections = re.split(r'(\n|^)[A-Za-z0-9\!\?\.\-\(\)\&]+[\:\-]*', doc)  # Split by headings or sections
     chunks = []
     current_chunk = ""
@@ -61,17 +61,22 @@ def split_document(doc, chunk_size=500):
     return chunks
 
 def get_embeddings(texts):
+    print("get_embeddings-----------------")
+    # converting text into vector .
     model = SentenceTransformer("all-MiniLM-L6-v2")
     embeddings = model.encode(texts)
     return np.array(embeddings)
 
 def create_faiss_index(embeddings):
+    print("create_faiss_index-----------------")
+
     dim = embeddings.shape[1]
     index = faiss.IndexFlatL2(dim)
     index.add(embeddings)
     return index
 
 def query_faiss_index(query, faiss_index, top_k=5):
+    print("query_faiss_index---------")
     query_embedding = get_embeddings([query])[0]
     D, I = faiss_index.search(np.array([query_embedding]), top_k)
     return I[0]
@@ -80,6 +85,8 @@ def query_faiss_index(query, faiss_index, top_k=5):
 llm = ChatOpenAI(model="gpt-4o", temperature=0.3)
 
 def openai_token_counter(messages) -> int:
+    print("openai_token_counter---------")
+
     # Convert messages to a single string
     buffer_string = get_buffer_string(messages)
 
@@ -88,6 +95,7 @@ def openai_token_counter(messages) -> int:
     tokens = encoding.encode(buffer_string)
     return len(tokens)
 def generate_response(wid, query,token_counter, relevant_chunks,history=None):
+    print("generate_response-------------")
     if history is None:
         history =load_chat_history(wid)
     date = parse_natural_date(query)
@@ -325,6 +333,7 @@ Use the conversation history below to maintain continuity.
 import tiktoken
 
 def cococure_bot(query, faq_content):
+    print("cococure_bot------------------")
     chunks = split_document(faq_content)
 
     embeddings = get_embeddings(chunks)
@@ -420,10 +429,20 @@ class CococureBotWithHistory:
             self.memory.chat_memory.add_user_message(query)
             self.memory.chat_memory.add_ai_message(response)
             save_conversation(self.wid, msg_id, query, response)
+        
            
             return {"response": response}
+        
+         # Step 2: Load memory or fallback to MongoDB
+        if self.memory.chat_memory.messages:
+            history = []
+            for msg in self.memory.chat_memory.messages[-10:]:
+                role = "user" if isinstance(msg, HumanMessage) else "assistant"
+                history.append({"role": role, "content": msg.content})
+        else:
+            history = load_chat_history(self.wid, limit=10)
 
-
+        # Step 3: Vector Search (FAISS)
 
 
         relevant_indices = query_faiss_index(query, self.faiss_index, top_k=5)
@@ -433,23 +452,13 @@ class CococureBotWithHistory:
 
         # updated this  This way, if Redis is empty, generate_response() will fallback to loading from MongoDB.
 
-        if self.memory.chat_memory.messages:
-            history = []
-            for msg in self.memory.chat_memory.messages[-10:]:
-                role = "user" if isinstance(msg, HumanMessage) else "assistant"
-                history.append({"role": role, "content": msg.content})
-        else:
-            history = None
-                # Step 5: Add user message to memory
-        self.memory.chat_memory.add_user_message(query)
-
-        redis_client = redis.Redis(host='localhost', port=6379, db=0)
-
-        redis_client.expire(f"message_store:{self.wid}", 3600)  # expires in 1 hour
-
-        print("history stored -----------add_user_message-----------------")
-
-      
+        # if self.memory.chat_memory.messages:
+        #     history = []
+        #     for msg in self.memory.chat_memory.messages[-10:]:
+        #         role = "user" if isinstance(msg, HumanMessage) else "assistant"
+        #         history.append({"role": role, "content": msg.content})
+        # else:
+        #     history = load_chat_history(self.wid, limit=10)
 
         response = generate_response(
             self.wid,
@@ -458,8 +467,17 @@ class CococureBotWithHistory:
             token_counter=self.count_message_tokens,
             history=history
         )
+                # Step 5: Add user message to memory and redis
+        self.memory.chat_memory.add_user_message(query)
+
+        redis_client = redis.Redis(host='localhost', port=6379, db=0)
+
+        # redis_client.expire(f"message_store:{self.wid}", 3600)  # expires in 1 hour
+
         self.memory.chat_memory.add_ai_message(response)
         redis_client.expire(f"message_store:{self.wid}", 3600)
+
+        # Step 6: Update previous query/vector and save to DB
 
         self.previous_query = query
         self.previous_topic_vector = get_embeddings([query])[0]
@@ -492,6 +510,7 @@ async def handle_user_message(wid, query, msg_id):
     inputs = {"user_message": query}  # <-- fix here
     response = await bot.answer(query, msg_id, inputs)
     return response
+
 def filter_chunks_by_date(chunks, query):
     # e.g., extract 29 May from query
     pattern = re.search(r'\b(\d{1,2})\s+(may|june|july|august)\b', query, re.IGNORECASE)
