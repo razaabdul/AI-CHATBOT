@@ -3,8 +3,11 @@ import openai
 import faiss
 import numpy as np
 import re
+import tiktoken
+import os 
+from datetime import datetime
+import redis
 from sentence_transformers import SentenceTransformer
-
 from langchain_community.chat_models import ChatOpenAI
 # from datetime import datetime
 
@@ -22,9 +25,7 @@ from langchain_core.messages.utils import trim_messages
 import tiktoken
 from langchain_core.messages import get_buffer_string
 
-import os 
-from datetime import datetime
-import redis
+
 from langchain_community.chat_message_histories import RedisChatMessageHistory
 
 from dotenv import load_dotenv
@@ -322,15 +323,9 @@ Use the conversation history below to maintain continuity.
 
     # Step 8: Save conversation to DB
     response_text = response.choices[0].message.content
-    collection.insert_one({
-        "wid": wid,
-        "user_message": query,
-        "bot_response": response_text,
-        "timestamp": datetime.utcnow()
-    })
+
 
     return response_text
-import tiktoken
 
 def cococure_bot(query, faq_content):
     print("cococure_bot------------------")
@@ -450,15 +445,7 @@ class CococureBotWithHistory:
         relevant_chunks = filter_chunks_by_date(relevant_chunks, query)
         context = "\n\n".join(relevant_chunks)
 
-        # updated this  This way, if Redis is empty, generate_response() will fallback to loading from MongoDB.
-
-        # if self.memory.chat_memory.messages:
-        #     history = []
-        #     for msg in self.memory.chat_memory.messages[-10:]:
-        #         role = "user" if isinstance(msg, HumanMessage) else "assistant"
-        #         history.append({"role": role, "content": msg.content})
-        # else:
-        #     history = load_chat_history(self.wid, limit=10)
+       
 
         response = generate_response(
             self.wid,
