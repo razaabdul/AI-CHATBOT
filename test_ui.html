@@ -1,0 +1,631 @@
+<!-- 
+
+
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test WhatsApp Bot</title>
+  <style>
+    body { font-family: Arial; padding: 20px; max-width: 500px; margin: auto; }
+    input, textarea, button { width: 100%; padding: 10px; margin: 10px 0; }
+    .chat-box { border: 1px solid #ccc; padding: 10px; background: #f9f9f9; max-height: 400px; overflow-y: auto; }
+  </style>
+</head>
+<body>
+  <h2>Simulate WhatsApp Message</h2>
+
+  <label>Phone Number (waId)</label>
+  <input id="waId" placeholder="e.g., 16073739682" value="16073739682">
+
+  <label>Message</label>
+  <textarea id="messageText" placeholder="Type your message here"></textarea>
+
+  <button id="sendBtn">Send</button>
+
+  <div class="chat-box" id="chatBox"></div>
+
+  <script>
+    const sendBtn = document.getElementById("sendBtn");
+
+    sendBtn.addEventListener("click", async () => {
+      sendBtn.disabled = true;
+
+      const waId = document.getElementById("waId").value.trim();
+      const text = document.getElementById("messageText").value.trim();
+
+      if (!waId || !text) {
+        alert("Please enter both phone number and message.");
+        sendBtn.disabled = false;
+        return;
+      }
+
+      const msgId = "test_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+
+      const payload = {
+    waId: waId,
+    text: text,
+    id: "test_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+    owner: false,
+    eventType: "userMessage",
+    test_mode: true   // <--- this tells the backend it's from test UI
+  };
+
+
+      try {
+        const res = await fetch("/simulate-message", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        const result = await res.json();
+
+        document.getElementById("chatBox").innerHTML += `
+          <p><strong>You:</strong> ${text}</p>
+          <p><strong>Bot:</strong> ${result.message || '[No response]'}</p>
+          <hr>
+        `;
+      } catch (error) {
+        document.getElementById("chatBox").innerHTML += `
+          <p style="color:red;"><strong>Error:</strong> ${error.message}</p><hr>
+        `;
+      }
+
+      sendBtn.disabled = false;
+    });
+  </script>
+</body>
+</html> -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Bot Simulator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f0f0f0;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .whatsapp-container {
+            width: 100%;
+            max-width: 400px;
+            height: 600px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .header {
+            background: #075E54;
+            color: white;
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-avatar {
+            width: 40px;
+            height: 40px;
+            background: #ddd;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .header-info h1 {
+            font-size: 16px;
+            font-weight: 500;
+        }
+
+        .header-info p {
+            font-size: 12px;
+            color: #b8e6c1;
+            margin-top: 2px;
+        }
+
+        .phone-input-section {
+            background: #fff3cd;
+            border-bottom: 1px solid #ffeaa7;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+    .phone-input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 20px;
+    font-size: 14px;
+    outline: none;
+    background: white; /* Add this for select */
+}
+        .phone-input:focus {
+            border-color: #075E54;
+        }
+
+        .messages-area {
+            flex: 1;
+            background: linear-gradient(to bottom, #e5ddd5 0%, #d2d9cd 100%);
+            padding: 16px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #666;
+            margin-top: 60px;
+        }
+
+        .empty-state-icon {
+            width: 60px;
+            height: 60px;
+            background: #ddd;
+            border-radius: 50%;
+            margin: 0 auto 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        .message {
+            display: flex;
+            margin-bottom: 8px;
+        }
+
+        .message.user {
+            justify-content: flex-end;
+        }
+
+        .message.bot {
+            justify-content: flex-start;
+        }
+
+        .message-bubble {
+            max-width: 80%;
+            padding: 8px 12px;
+            border-radius: 8px;
+            position: relative;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+
+        .message.user .message-bubble {
+            background: #dcf8c6;
+            border-bottom-right-radius: 2px;
+        }
+
+        .message.bot .message-bubble {
+            background: white;
+            border-bottom-left-radius: 2px;
+        }
+
+        .message-text {
+            font-size: 14px;
+            line-height: 1.4;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .message-time {
+            font-size: 11px;
+            color: #666;
+            margin-top: 4px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .message.user .message-time {
+            justify-content: flex-end;
+        }
+
+        .read-receipt {
+            display: flex;
+            gap: 1px;
+        }
+
+        .read-receipt-dot {
+            width: 4px;
+            height: 4px;
+            background: #4fc3f7;
+            border-radius: 50%;
+        }
+
+        .typing-indicator {
+            display: flex;
+            justify-content: flex-start;
+            margin-bottom: 8px;
+        }
+
+        .typing-bubble {
+            background: white;
+            padding: 12px 16px;
+            border-radius: 8px;
+            border-bottom-left-radius: 2px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+
+        .typing-dots {
+            display: flex;
+            gap: 4px;
+        }
+
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            background: #999;
+            border-radius: 50%;
+            animation: typing 1.4s infinite ease-in-out;
+        }
+
+        .typing-dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes typing {
+            0%, 60%, 100% {
+                transform: translateY(0);
+                opacity: 0.5;
+            }
+            30% {
+                transform: translateY(-10px);
+                opacity: 1;
+            }
+        }
+
+        .input-area {
+            background: #f0f0f0;
+            padding: 12px 16px;
+            border-top: 1px solid #ddd;
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+        }
+
+        .input-wrapper {
+            flex: 1;
+            background: white;
+            border-radius: 20px;
+            border: 1px solid #ddd;
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+        }
+
+        .message-input {
+            flex: 1;
+            border: none;
+            outline: none;
+            font-size: 14px;
+            resize: none;
+            min-height: 20px;
+            max-height: 100px;
+            font-family: inherit;
+        }
+
+        .send-button {
+            width: 48px;
+            height: 48px;
+            background: #25d366;
+            border: none;
+            border-radius: 50%;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            transition: background 0.2s;
+        }
+
+        .send-button:hover:not(:disabled) {
+            background: #20bd5a;
+        }
+
+        .send-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        /* Scrollbar styling */
+        .messages-area::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .messages-area::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .messages-area::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 3px;
+        }
+
+        @media (max-width: 480px) {
+            .whatsapp-container {
+                height: 100vh;
+                border-radius: 0;
+                max-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="whatsapp-container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-avatar">🤖</div>
+            <div class="header-info">
+                <h1>WhatsApp Bot</h1>
+                <p id="headerStatus">Testing Mode</p>
+            </div>
+        </div>
+
+        <!-- Phone Input Section -->
+        <div class="phone-input-section">
+          <span>📞</span>
+          <input 
+              type="text" 
+              id="waId" 
+              class="phone-input" 
+              placeholder="Phone Number (waId)" 
+              
+              list="allowedNumbers"
+          >
+          <datalist id="allowedNumbers">
+              <option value="16073739682">16073739682 (Test 1)</option>
+              <option value="1234567890">1234567890 (Test 2)</option>
+          </datalist>
+      </div>
+
+        <!-- Messages Area -->
+        <div class="messages-area" id="messagesArea">
+            <div class="empty-state" id="emptyState">
+                <div class="empty-state-icon">💬</div>
+                <p>Start a conversation with the WhatsApp bot</p>
+            </div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="input-area">
+            <div class="input-wrapper">
+                <textarea 
+                    id="messageInput" 
+                    class="message-input" 
+                    placeholder="Type a message..."
+                    rows="1"
+                ></textarea>
+            </div>
+            <button id="sendButton" class="send-button">
+                ➤
+            </button>
+        </div>
+    </div>
+
+    <script>
+        class WhatsAppSimulator {
+            constructor() {
+                this.messages = [];
+                this.isLoading = false;
+                
+                this.waIdInput = document.getElementById('waId');
+                this.messageInput = document.getElementById('messageInput');
+                this.sendButton = document.getElementById('sendButton');
+                this.messagesArea = document.getElementById('messagesArea');
+                this.emptyState = document.getElementById('emptyState');
+                this.headerStatus = document.getElementById('headerStatus');
+                
+                this.init();
+            }
+            
+            init() {
+                this.sendButton.addEventListener('click', () => this.sendMessage());
+                this.messageInput.addEventListener('keypress', (e) => this.handleKeyPress(e));
+                this.messageInput.addEventListener('input', () => this.autoResize());
+                this.waIdInput.addEventListener('input', () => this.updateHeaderStatus());
+                
+                this.updateHeaderStatus();
+            }
+            
+            updateHeaderStatus() {
+                const waId = this.waIdInput.value.trim();
+                this.headerStatus.textContent = waId ? `Testing: ${waId}` : 'Testing Mode';
+            }
+            
+            autoResize() {
+                this.messageInput.style.height = 'auto';
+                this.messageInput.style.height = Math.min(this.messageInput.scrollHeight, 100) + 'px';
+            }
+            
+            handleKeyPress(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    this.sendMessage();
+                }
+            }
+            
+            formatTime(date) {
+                return date.toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                });
+            }
+            
+            addMessage(text, isUser, timestamp = new Date()) {
+                const message = {
+                    id: Date.now() + Math.random(),
+                    text,
+                    isUser,
+                    timestamp
+                };
+                
+                this.messages.push(message);
+                this.renderMessage(message);
+                this.scrollToBottom();
+                
+                if (this.messages.length === 1) {
+                    this.emptyState.classList.add('hidden');
+                }
+            }
+            
+            renderMessage(message) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${message.isUser ? 'user' : 'bot'}`;
+                
+                const readReceipt = message.isUser ? 
+                    '<div class="read-receipt"><div class="read-receipt-dot"></div><div class="read-receipt-dot"></div></div>' : '';
+                
+                messageDiv.innerHTML = `
+                    <div class="message-bubble">
+                        <div class="message-text">${this.escapeHtml(message.text)}</div>
+                        <div class="message-time">
+                            ${this.formatTime(message.timestamp)}
+                            ${readReceipt}
+                        </div>
+                    </div>
+                `;
+                
+                this.messagesArea.appendChild(messageDiv);
+            }
+            
+            showTypingIndicator() {
+                const typingDiv = document.createElement('div');
+                typingDiv.className = 'typing-indicator';
+                typingDiv.id = 'typingIndicator';
+                
+                typingDiv.innerHTML = `
+                    <div class="typing-bubble">
+                        <div class="typing-dots">
+                            <div class="typing-dot"></div>
+                            <div class="typing-dot"></div>
+                            <div class="typing-dot"></div>
+                        </div>
+                    </div>
+                `;
+                
+                this.messagesArea.appendChild(typingDiv);
+                this.scrollToBottom();
+            }
+            
+            hideTypingIndicator() {
+                const typingIndicator = document.getElementById('typingIndicator');
+                if (typingIndicator) {
+                    typingIndicator.remove();
+                }
+            }
+            
+            scrollToBottom() {
+                setTimeout(() => {
+                    this.messagesArea.scrollTop = this.messagesArea.scrollHeight;
+                }, 100);
+            }
+            
+            escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    let html = div.innerHTML;
+    
+    // Convert URLs to clickable links
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    html = html.replace(urlRegex, '<a href="$1" target="_blank" style="color: #1976d2; text-decoration: underline;">$1</a>');
+    
+    return html;
+}
+            
+            async sendMessage() {
+                const waId = this.waIdInput.value.trim();
+                const text = this.messageInput.value.trim();
+                
+                if (!waId || !text) {
+                    alert('Please enter both phone number and message.');
+                    return;
+                }
+                
+                if (this.isLoading) return;
+                
+                this.isLoading = true;
+                this.sendButton.disabled = true;
+                
+                // Add user message
+                this.addMessage(text, true);
+                this.messageInput.value = '';
+                this.autoResize();
+                
+                // Show typing indicator
+                this.showTypingIndicator();
+                
+                const payload = {
+                    waId: waId,
+                    text: text,
+                    id: "test_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+                    owner: false,
+                    eventType: "userMessage",
+                    test_mode: true
+                };
+                
+                try {
+                    const response = await fetch('/simulate-message', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    const result = await response.json();
+                    
+                    // Hide typing indicator
+                    this.hideTypingIndicator();
+                    
+                    // Add bot response
+                    const botMessage = result.message || 'No response received';
+                    this.addMessage(botMessage, false);
+                    
+                } catch (error) {
+                    this.hideTypingIndicator();
+                    this.addMessage(`Error: ${error.message}`, false);
+                }
+                
+                this.isLoading = false;
+                this.sendButton.disabled = false;
+                this.messageInput.focus();
+            }
+        }
+        
+        // Initialize the app when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            new WhatsAppSimulator();
+        });
+    </script>
+</body>
+</html>

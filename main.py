@@ -513,31 +513,12 @@ def filter_chunks_by_date(chunks, query):
 
 import uuid
 import asyncio
-
-
-if __name__ == "__main__":
-    async def main():
-        wid = "newuser"
-        faq_content = load_faq_content()
-
-        # Initialize the bot (handles Redis & Mongo logic inside)
-        bot = CococureBotWithHistory(faq_content, wid)
-
-        print("🤖 CococureBot ready!\n")
-
-        while True:
-            query = input("You: ")
-            if query.lower() in ["exit", "quit"]:
-                break
-
-            msg_id = str(uuid.uuid4())  # Unique ID
-            inputs = {"user_message": query}
-
-            # Get response
-            response = await bot.answer(query, msg_id, inputs)
-            print("Bot:", response)
-
-    asyncio.run(main())
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+import json
+import urllib.parse
+import requests
+app = FastAPI()
 
 
 
@@ -545,12 +526,145 @@ if __name__ == "__main__":
 
 
 
-# wati_api_key = os.getenv("WATI_API_KEY")
-# wati_base_url = "https://live-mt-server.wati.io/101643/api/v1"
-# AUTO_REPLY_TEXT = "Thanks for your message! We'll get back to you shortly."
+
+wati_api_key = os.getenv("WATI_API_KEY")
+wati_base_url = "https://live-mt-server.wati.io/101643/api/v1"
+AUTO_REPLY_TEXT = "Thanks for your message! We'll get back to you shortly."
+
+ALLOWED_NUMBERS = {"16073739682", "1234567890"}  # Add test numbers as strings
+
+
+@app.post("/wati/webhook")
+async def wati_incoming_message(request: Request):
+    try:
+        data = await request.json()
+        print(f"📩 Payload received: {data}")
+    except Exception:
+        return JSONResponse(content={"error": "Invalid JSON"}, status_code=400)
+
+    if data.get("eventType") in ["sessionMessageSent", "sessionMessageSent_v2"]:
+        return JSONResponse(content={"message": "Ignored system event"}, status_code=200)
+
+    sender_phone = str(data.get("waId"))  # always convert to string
+    message_body = data.get("text", "").strip()
+    message_id = data.get("id")
+
+
+    if not sender_phone or not message_body:
+        return JSONResponse(content={"message": "Missing fields"}, status_code=400)
+
+    if data.get("owner", True):
+        return JSONResponse(content={"message": "Ignoring bot message"}, status_code=200)
+
+    if sender_phone not in ALLOWED_NUMBERS:
+        print(f"❌ Ignoring message from unauthorized number: {sender_phone}")
+        return JSONResponse(content={"message": "Unauthorized sender"}, status_code=403)
+
+    if is_message_processed(message_id):
+
+        print(f"🛑 Duplicate message detected: {message_id}")
+        return JSONResponse(content={"message": "Already processed message"}, status_code=200)
+
+    # if sender_phone in replied_users:
+    #     return JSONResponse(content={"message": "Already replied"}, status_code=200)
+
+    # 🤖 Bot logic
+    faq_content = load_faq_content()
+    bot = CococureBotWithHistory(faq_content, wid=sender_phone)
+    response = await bot.answer(message_body, msg_id=message_id, inputs={"user_message": message_body})
+
+    send_whatsapp_message(sender_phone, response)
+    replied_users.add(sender_phone)
+
+    return JSONResponse(content={"message": response.get("response", "")}, status_code=200)
+
+
+
+def send_whatsapp_message(phone_number: str, message: str):
+    encoded_message = urllib.parse.quote(str(message))
+    send_url = f"{wati_base_url}/sendSessionMessage/{phone_number}?messageText={encoded_message}"
+    headers = {"Authorization": f"Bearer {wati_api_key}"}
+
+    try:
+        response = requests.post(send_url, headers=headers)
+        if response.status_code == 200:
+            print(f"✅ Auto-reply sent to {phone_number}")
+        else:
+            print(f"❌ Failed to send auto-reply. Status: {response.status_code}, Error: {response.text}")
+    except Exception as e:
+        print(f"🚨 Exception while sending auto-reply: {str(e)}")
+
+
+
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
+
+app.mount("/static", StaticFiles(directory="."), name="static")
+
+@app.get("/", response_class=HTMLResponse)
+async def serve_ui():
+    with open("test_ui.html", "r") as file:
+        return file.read()
+
+@app.post("/simulate-message")
+async def simulate_ui_message(request: Request):
+    return await wati_incoming_message(request)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# if __name__ == "__main__":
+#     async def main():
+#         wid = "newuser"
+#         faq_content = load_faq_content()
+
+#         # Initialize the bot (handles Redis & Mongo logic inside)
+#         bot = CococureBotWithHistory(faq_content, wid)
+
+#         print("🤖 CococureBot ready!\n")
+
+#         while True:
+#             query = input("You: ")
+#             if query.lower() in ["exit", "quit"]:
+#                 break
+
+#             msg_id = str(uuid.uuid4())  # Unique ID
+#             inputs = {"user_message": query}
+
+#             # Get response
+#             response = await bot.answer(query, msg_id, inputs)
+#             print("Bot:", response)
+
+#     asyncio.run(main())
+
+
+
+
+
 
 # # Cache message ID with expiry
 # processed_message_ids = {}  # Format: { message_id: expiry_time }
+
+
+
+
+
 
 
 # @app.post("/wati/webhook")
